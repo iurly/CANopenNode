@@ -48,7 +48,6 @@
 //                                INCLUDES
 //============================================================================
 #include "CANopen.h"
-#include "stm32f30x.h"
 
 //============================================================================
 //                                DEFINES
@@ -127,8 +126,8 @@ static CO_SDO_abortCode_t storeParameters(uint32_t FlashAddress, uint8_t Paramet
     }
 
     addressFinal = FlashAddress + bytes_to_write;
-    /* Clear pending flakgs (if any) */  
-    FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR); 
+    /* Clear pending flakgs (if any) */
+    FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR);
 
     /* Erase page */
     FLASH_ErasePage(FlashAddress);
@@ -226,7 +225,7 @@ static CO_SDO_abortCode_t CO_ODF_1011_RestoreParam(CO_ODF_arg_t *ODF_arg)
     }
 
     CO_SDO_abortCode_t Result = restoreParameters(CO_OD_FLASH_PARAM_DEFAULT, ODF_arg->subIndex);
-    
+
     if (Result != CO_SDO_AB_NONE) {
         return Result;
     }

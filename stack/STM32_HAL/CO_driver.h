@@ -58,10 +58,11 @@
 #include <stdbool.h>
 #include <stddef.h>         /* for 'NULL' */
 #include <stdint.h>         /* for 'int8_t' to 'uint64_t' */
-#include "stm32f30x.h"
+#include "stm32l4xx.h"
 
 #define bool_t bool
 #define CO_LITTLE_ENDIAN
+
 
 /* Exported define -----------------------------------------------------------*/
 #define PACKED_STRUCT               __attribute__((packed))
@@ -109,9 +110,6 @@
 
 #define CO_CAN_TXMAILBOX   ((uint8_t)0x00)
 
-/* Timeout for initialization */
-
-#define INAK_TIMEOUT        ((uint32_t)0x0000FFFF)
 /* Data types */
     typedef float                   float32_t;
     typedef long double             float64_t;
@@ -174,7 +172,7 @@ typedef struct{
 
 /* CAN module object. */
 typedef struct{
-    CAN_TypeDef        *CANbaseAddress;         /* STM32F4xx specific */
+    CAN_HandleTypeDef        *CANbaseAddress;         /* STM32F4xx specific */
     CO_CANrx_t         *rxArray;
     uint16_t            rxSize;
     CO_CANtx_t         *txArray;
@@ -194,13 +192,13 @@ typedef struct{
 /* Exported functions -----------------------------------------------------------*/
 
 /* Request CAN configuration or normal mode */
-void CO_CANsetConfigurationMode(CAN_TypeDef* CANbaseAddress);
+void CO_CANsetConfigurationMode(int32_t _CANbaseAddress);
 void CO_CANsetNormalMode(CO_CANmodule_t *CANmodule);
 
 /* Initialize CAN module object. */
 CO_ReturnError_t CO_CANmodule_init(
         CO_CANmodule_t         *CANmodule,
-        CAN_TypeDef            *CANbaseAddress,
+        int32_t                 _CANbaseAddress,
         CO_CANrx_t              rxArray[],
         uint16_t                rxSize,
         CO_CANtx_t              txArray[],
