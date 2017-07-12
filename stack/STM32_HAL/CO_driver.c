@@ -158,11 +158,11 @@ CO_ReturnError_t CO_CANmodule_init(
     CANmodule->CANbaseAddress->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
     CANmodule->CANbaseAddress->Init.BS1 = CAN_BS1_11TQ;    // changed by VJ, old value = CAN_BS1_3tq;
     CANmodule->CANbaseAddress->Init.BS2 = CAN_BS2_4TQ;     // changed by VJ, old value = CAN_BS2_2tq;
-    CANmodule->CANbaseAddress->Init.NART = ENABLE;         // No Automatic retransmision
+    CANmodule->CANbaseAddress->Init.NART = DISABLE;         // No Automatic retransmision
 
 	/* Enable automatic Bus-Off management (ABOM) so to automatically
 	 * rejoin the bus once the error conditions have been cleared */
-    //CANmodule->CANbaseAddress->Init.ABOM = ENABLE;
+    CANmodule->CANbaseAddress->Init.ABOM = ENABLE;
 
 
 
