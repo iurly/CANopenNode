@@ -72,14 +72,14 @@
 #define ADDR_CAN1                   CAN1
 
 /* Critical sections */
-#define CO_LOCK_CAN_SEND()          __set_PRIMASK(1);
-#define CO_UNLOCK_CAN_SEND()        __set_PRIMASK(0);
+#define CO_LOCK_CAN_SEND()          do {} while (0) //__set_PRIMASK(1);
+#define CO_UNLOCK_CAN_SEND()        do {} while (0) //__set_PRIMASK(0);
 
-#define CO_LOCK_EMCY()              __set_PRIMASK(1);
-#define CO_UNLOCK_EMCY()            __set_PRIMASK(0);
+#define CO_LOCK_EMCY()              do {} while (0) //__set_PRIMASK(1);
+#define CO_UNLOCK_EMCY()            do {} while (0) //__set_PRIMASK(0);
 
-#define CO_LOCK_OD()                __set_PRIMASK(1);
-#define CO_UNLOCK_OD()              __set_PRIMASK(0);
+#define CO_LOCK_OD()                do {} while (0) //__set_PRIMASK(1);
+#define CO_UNLOCK_OD()              do {} while (0) //__set_PRIMASK(0);
 
 #define CLOCK_CAN                   RCC_APB1Periph_CAN1
 
