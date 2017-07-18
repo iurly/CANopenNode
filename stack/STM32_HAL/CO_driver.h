@@ -172,7 +172,7 @@ typedef struct{
 
 /* CAN module object. */
 typedef struct{
-    CAN_HandleTypeDef        *CANbaseAddress;         /* STM32F4xx specific */
+    CAN_HandleTypeDef  *hcan;         /* STM32 HAL specific */
     CO_CANrx_t         *rxArray;
     uint16_t            rxSize;
     CO_CANtx_t         *txArray;
