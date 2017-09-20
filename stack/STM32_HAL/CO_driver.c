@@ -137,14 +137,14 @@ CO_ReturnError_t CO_CANmodule_init(
     CO_CANClkSetting();
 
     /* Configure CAN address relying on HAL */
-    hcan->Init.Prescaler = HAL_RCC_GetPCLK1Freq() / ( (11 + 4 + 1) * (CANbitRate*1000) );
+    hcan->Init.Prescaler = HAL_RCC_GetPCLK1Freq() / ( (14 + 5 + 1) * (CANbitRate*1000) );
 
     hcan->Init.Mode = CAN_MODE_NORMAL;
     hcan->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
-    hcan->Init.BS1 = CAN_BS1_11TQ;    // changed by VJ, old value = CAN_BS1_3tq;
-    hcan->Init.BS2 = CAN_BS2_4TQ;     // changed by VJ, old value = CAN_BS2_2tq;
+    hcan->Init.BS1 = CAN_BS1_14TQ;    // changed by VJ, old value = CAN_BS1_3tq;
+    hcan->Init.BS2 = CAN_BS2_5TQ;     // changed by VJ, old value = CAN_BS2_2tq;
     hcan->Init.NART = DISABLE;         // No Automatic retransmision
-
+    hcan->Init.TXFP = ENABLE;
 	/* Enable automatic Bus-Off management (ABOM) so to automatically
 	 * rejoin the bus once the error conditions have been cleared */
     hcan->Init.ABOM = ENABLE;
@@ -270,12 +270,14 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
     CO_ReturnError_t err = CO_ERROR_NO;
     uint8_t txRes;
 
+#if 0
     /* Verify overflow */
     if (buffer->bufferFull) {
         if(!CANmodule->firstCANtxMessage) /* don't set error, if bootup message is still on buffers */
             CO_errorReport((CO_EM_t*)CANmodule->em, CO_EM_CAN_TX_OVERFLOW, CO_EMC_CAN_OVERRUN, 0);
         err = CO_ERROR_TX_OVERFLOW;
     }
+#endif
 
     CO_LOCK_CAN_SEND();
 
