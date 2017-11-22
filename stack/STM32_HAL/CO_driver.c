@@ -58,6 +58,7 @@
 /* Private function ----------------------------------------------------------*/
 static void CO_CANClkSetting (void);
 static uint8_t CO_CANsendToModule(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer);
+static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CANbitRate);
 
 /*******************************************************************************
    Macro and Constants - CAN module registers
@@ -86,6 +87,18 @@ void CO_CANmodule_disable(CO_CANmodule_t *CANmodule)
     CAN_HandleTypeDef* hcan = CANmodule->hcan;
 	hcan->Init.Mode      = CAN_MODE_SILENT;
 	HAL_CAN_Init( hcan );
+}
+
+/******************************************************************************/
+CO_ReturnError_t CO_CANmodule_setBitrate(
+        CO_CANmodule_t         *CANmodule,
+        uint16_t                CANbitRate)
+{
+    CAN_HandleTypeDef* hcan = CANmodule->hcan;
+    if (CO_CANsetBitrate(hcan, CANbitRate) == HAL_OK)
+        return CO_ERROR_NO;
+    else
+        return CO_ERROR_ILLEGAL_ARGUMENT;
 }
 
 /******************************************************************************/
@@ -138,25 +151,10 @@ CO_ReturnError_t CO_CANmodule_init(
     /* Setting Clock of CAN HW */
     CO_CANClkSetting();
 
-    /* Configure CAN address relying on HAL */
-    hcan->Init.Prescaler = HAL_RCC_GetPCLK1Freq() / ( (14 + 5 + 1) * (CANbitRate*1000) );
-
-    hcan->Init.Mode = CAN_MODE_NORMAL;
-    hcan->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
-    hcan->Init.BS1 = CAN_BS1_14TQ;    // changed by VJ, old value = CAN_BS1_3tq;
-    hcan->Init.BS2 = CAN_BS2_5TQ;     // changed by VJ, old value = CAN_BS2_2tq;
-    hcan->Init.NART = DISABLE;         // No Automatic retransmision
-    hcan->Init.TXFP = ENABLE;
-	/* Enable automatic Bus-Off management (ABOM) so to automatically
-	 * rejoin the bus once the error conditions have been cleared */
-    hcan->Init.ABOM = ENABLE;
-
-
-
-
-    result = HAL_CAN_Init(hcan);
+    /* Set bit rate */
+    result = CO_CANsetBitrate(hcan, CANbitRate);
     if (result != HAL_OK) {
-       return CO_ERROR_TIMEOUT;  /* CO- Return Init failed */
+       return CO_ERROR_ILLEGAL_BAUDRATE;  /* CO- Return Init failed */
     }
 
     memset(&CAN_FilterInitStruct, 0, sizeof (CAN_FilterInitStruct));
@@ -480,6 +478,23 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 
 }
 
+/******************************************************************************/
+static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CANbitRate)
+{
+    /* Configure CAN address relying on HAL */
+    hcan->Init.Prescaler = HAL_RCC_GetPCLK1Freq() / ( (14 + 5 + 1) * (CANbitRate*1000) );
+
+    hcan->Init.Mode = CAN_MODE_NORMAL;
+    hcan->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
+    hcan->Init.BS1 = CAN_BS1_14TQ;    // changed by VJ, old value = CAN_BS1_3tq;
+    hcan->Init.BS2 = CAN_BS2_5TQ;     // changed by VJ, old value = CAN_BS2_2tq;
+    hcan->Init.NART = DISABLE;         // No Automatic retransmision
+    hcan->Init.TXFP = ENABLE;
+	/* Enable automatic Bus-Off management (ABOM) so to automatically
+	 * rejoin the bus once the error conditions have been cleared */
+    hcan->Init.ABOM = ENABLE;
+	return HAL_CAN_Init( hcan );
+}
 /******************************************************************************/
 static uint8_t CO_CANsendToModule(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 {

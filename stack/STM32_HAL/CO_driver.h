@@ -206,6 +206,11 @@ CO_ReturnError_t CO_CANmodule_init(
         uint16_t                CANbitRate);
 
 
+/* Change bitrate. */
+CO_ReturnError_t CO_CANmodule_setBitrate(
+        CO_CANmodule_t         *CANmodule,
+        uint16_t                CANbitRate);
+
 /* Switch off CANmodule. */
 void CO_CANmodule_disable(CO_CANmodule_t *CANmodule);
 
