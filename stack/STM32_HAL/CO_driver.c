@@ -126,6 +126,8 @@ CO_ReturnError_t CO_CANmodule_init(
 
     for (i = 0; i < rxSize; i++) {
         CANmodule->rxArray[i].ident = 0;
+        CANmodule->rxArray[i].mask = 0xFFFFU;
+        CANmodule->rxArray[i].object = NULL;
         CANmodule->rxArray[i].pFunct = 0;
     }
 
