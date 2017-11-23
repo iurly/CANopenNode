@@ -177,6 +177,8 @@ void CO_NMT_blinkingProcess50ms(CO_NMT_t *NMT){
 
     if(++NMT->LEDblinking >= 4) NMT->LEDblinking = -4;
 
+    if(++NMT->LEDheartbeat >= 1) NMT->LEDheartbeat = 1;
+
     if(++NMT->LEDsingleFlash >= 4) NMT->LEDsingleFlash = -20;
 
     switch(++NMT->LEDdoubleFlash){
@@ -231,6 +233,9 @@ CO_NMT_reset_cmd_t CO_NMT_process(
         NMT->HB_TXbuff->data[0] = NMT->operatingState;
         CO_CANsend(NMT->HB_CANdev, NMT->HB_TXbuff);
 
+        /* We just sent a heartbeat. Keep a dedicated LED state that we could use for this purpose. */
+        NMT->LEDheartbeat = -2;
+
         if(NMT->operatingState == CO_NMT_INITIALIZING){
             if(HBtime > NMT->firstHBTime) NMT->HBproducerTimer = HBtime - NMT->firstHBTime;
             else                          NMT->HBproducerTimer = 0;
@@ -264,7 +269,11 @@ CO_NMT_reset_cmd_t CO_NMT_process(
     switch(NMT->operatingState){
         case CO_NMT_STOPPED:          NMT->LEDgreenRun = NMT->LEDsingleFlash;   break;
         case CO_NMT_PRE_OPERATIONAL:  NMT->LEDgreenRun = NMT->LEDblinking;      break;
-        case CO_NMT_OPERATIONAL:      NMT->LEDgreenRun = 1;                     break;
+        /* Deviation from the standard:
+         * In operational state, a LED permanently ON is not enough.
+         * Let's blink it off for a while every time we send a heartbeat.
+         */
+        case CO_NMT_OPERATIONAL:      NMT->LEDgreenRun = NMT->LEDheartbeat;     break;
     }
 
 

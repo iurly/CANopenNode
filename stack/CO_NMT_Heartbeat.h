@@ -152,6 +152,7 @@ typedef struct{
     uint8_t             operatingState; /**< See @ref CO_NMT_internalState_t */
     int8_t              LEDflickering;  /**< See @ref CO_NMT_statusLEDdiodes */
     int8_t              LEDblinking;    /**< See @ref CO_NMT_statusLEDdiodes */
+    int8_t              LEDheartbeat;   /**< See @ref CO_NMT_statusLEDdiodes */
     int8_t              LEDsingleFlash; /**< See @ref CO_NMT_statusLEDdiodes */
     int8_t              LEDdoubleFlash; /**< See @ref CO_NMT_statusLEDdiodes */
     int8_t              LEDtripleFlash; /**< See @ref CO_NMT_statusLEDdiodes */
