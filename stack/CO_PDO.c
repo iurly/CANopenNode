@@ -168,7 +168,16 @@ static void CO_TPDOconfigCom(CO_TPDO_t* TPDO, uint32_t COB_IDUsedByTPDO, uint8_t
     /* is TPDO used? */
     if((COB_IDUsedByTPDO & 0xBFFFF800L) == 0 && TPDO->dataLength && ID){
         /* is used default COB-ID? */
+
+#ifdef CANOPEN_TPDO_ADD_NODE_ID
+        /*TEST: comment out this check to always add nodeId to COB_IDUsedByTPDO
+         * In this way you can transmit more than 4 different TPDOS using one of two different approaches:
+         * A) reuse the same default COB_ID, e.g. 0x480+nodeId
+         * B) use different COB_IDs as if coming from different nodes, e.g. 0x481+nodeId (WARNING: select nodeIds wisely) */
+        ID += TPDO->nodeId;
+#else
         if(ID == TPDO->defaultCOB_ID) ID += TPDO->nodeId;
+#endif
         TPDO->valid = true;
     }
     else{
@@ -1018,9 +1027,13 @@ void CO_TPDO_process(
 
     }
     else{
+#ifdef CANOPEN_SILENT_STARTUP
+        TPDO->sendRequest = 0;
+#else
         /* Not operational or valid. Force TPDO first send after operational or valid. */
         if(TPDO->TPDOCommPar->transmissionType>=254) TPDO->sendRequest = 1;
         else                                         TPDO->sendRequest = 0;
+#endif
     }
 
     /* update timers */
