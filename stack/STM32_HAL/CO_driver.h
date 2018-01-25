@@ -112,7 +112,7 @@
 
 /* Data types */
     typedef float                   float32_t;
-    typedef long double             float64_t;
+    typedef double                  float64_t;
     typedef char                    char_t;
     typedef unsigned char           oChar_t;
     typedef unsigned char           domain_t;
