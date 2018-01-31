@@ -823,7 +823,12 @@ CO_ReturnError_t CO_TPDO_init(
     TPDO->syncCounter = 255;
     TPDO->inhibitTimer = 0;
     TPDO->eventTimer = ((uint32_t) TPDOCommPar->eventTimer) * 1000;
+
+#ifdef CANOPEN_SILENT_STARTUP
+        TPDO->sendRequest = 0;
+#else
     if(TPDOCommPar->transmissionType>=254) TPDO->sendRequest = 1;
+#endif
 
     CO_TPDOconfigMap(TPDO, TPDOMapPar->numberOfMappedObjects);
     CO_TPDOconfigCom(TPDO, TPDOCommPar->COB_IDUsedByTPDO, ((TPDOCommPar->transmissionType<=240) ? 1 : 0));
