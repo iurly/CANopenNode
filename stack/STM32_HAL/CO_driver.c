@@ -478,16 +478,92 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 
 }
 
+/** **************************************************************************
+ ** @brief Function-line macros to convert bit quanta to bit settings
+ ** *************************************************************************/
+
+#define CAN_BS1_TQ(n) \
+        (n ==  1) ? CAN_BS1_1TQ : \
+        (n ==  2) ? CAN_BS1_2TQ : \
+        (n ==  3) ? CAN_BS1_3TQ : \
+        (n ==  4) ? CAN_BS1_4TQ : \
+        (n ==  5) ? CAN_BS1_5TQ : \
+        (n ==  6) ? CAN_BS1_6TQ : \
+        (n ==  7) ? CAN_BS1_7TQ : \
+        (n ==  8) ? CAN_BS1_8TQ : \
+        (n ==  9) ? CAN_BS1_9TQ : \
+        (n == 10) ? CAN_BS1_10TQ : \
+        (n == 11) ? CAN_BS1_11TQ : \
+        (n == 12) ? CAN_BS1_12TQ : \
+        (n == 13) ? CAN_BS1_13TQ : \
+        (n == 14) ? CAN_BS1_14TQ : \
+        (n == 15) ? CAN_BS1_15TQ : \
+        (n == 16) ? CAN_BS1_16TQ : 0
+
+
+#define CAN_BS2_TQ(n) \
+        (n ==  2) ? CAN_BS2_2TQ : \
+        (n ==  3) ? CAN_BS2_3TQ : \
+        (n ==  4) ? CAN_BS2_4TQ : \
+        (n ==  5) ? CAN_BS2_5TQ : \
+        (n ==  6) ? CAN_BS2_6TQ : \
+        (n ==  7) ? CAN_BS2_7TQ : \
+        (n ==  8) ? CAN_BS2_8TQ : 0
+
+/** **************************************************************************
+ ** @brief  Find suitable prescaler and bitquanta settings
+ **         for the desidered bitrate, given the current clock frequency
+ ** @param clkFreq  clock frequency in Hz
+ ** @param bitrate  desired bitrate
+ ** @param out prescaler  prescaler
+ ** @param out bs1  BS1 time quanta
+ ** @param out bs2  BS2 time quanta
+ ** @return     1 if the function terminates correctly, 0 in case of errors
+ ** *************************************************************************/
+static int CAN_FindBitQuanta(uint32_t clkFreq, uint32_t bitrate,
+        uint32_t *prescaler, uint8_t *bs1, uint8_t *bs2)
+{
+    int bq_settings[][2] = {
+        { 14, 5 }, /* total 20, 15/20 sample point 75% */
+        {  8, 3 }, /* total 12, 9/12  sample point 75% */
+        { 11, 4 }, /* total 16, 12/16 sample point 75% */
+        { 10, 4 }, /* total 15, 11/15 sample point 73.3% */
+    };
+    int ns = sizeof(bq_settings) / sizeof(bq_settings[0]);
+    int i;
+
+    for (i = 0; i < ns; i++)
+    {
+        uint8_t n1 = bq_settings[i][0];
+        uint8_t n2 = bq_settings[i][1];
+        uint32_t nt = n1 + n2 + 1;
+        if (clkFreq % (nt*bitrate) == 0)
+        {
+            if (bs1) *bs1 = n1;
+            if (bs2) *bs2 = n2;
+            if (prescaler) *prescaler = clkFreq / (nt * bitrate);
+            return 1;
+        }
+    }
+    return 0;
+}
 /******************************************************************************/
 static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CANbitRate)
 {
+    uint32_t prescaler;
+    uint8_t bs1, bs2;
+    if (CAN_FindBitQuanta(HAL_RCC_GetPCLK1Freq(), CANbitRate*1000, &prescaler, &bs1, &bs2) == 0)
+    {
+        return HAL_ERROR;
+    }
+
     /* Configure CAN address relying on HAL */
-    hcan->Init.Prescaler = HAL_RCC_GetPCLK1Freq() / ( (14 + 5 + 1) * (CANbitRate*1000) );
+    hcan->Init.Prescaler = prescaler;
 
     hcan->Init.Mode = CAN_MODE_NORMAL;
     hcan->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
-    hcan->Init.BS1 = CAN_BS1_14TQ;    // changed by VJ, old value = CAN_BS1_3tq;
-    hcan->Init.BS2 = CAN_BS2_5TQ;     // changed by VJ, old value = CAN_BS2_2tq;
+    hcan->Init.BS1 = CAN_BS1_TQ(bs1);    // changed by VJ, old value = CAN_BS1_3tq;
+    hcan->Init.BS2 = CAN_BS2_TQ(bs2);     // changed by VJ, old value = CAN_BS2_2tq;
     hcan->Init.NART = DISABLE;         // No Automatic retransmision
     hcan->Init.TXFP = ENABLE;
 	/* Enable automatic Bus-Off management (ABOM) so to automatically
