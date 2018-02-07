@@ -52,6 +52,21 @@
 #include "CO_Emergency.h"
 #include <string.h>
 
+#ifdef CO_USE_TX_QUEUE
+#define TX_QUEUE_SIZE 16
+
+static CO_CANtx_t CO_TxQueue[TX_QUEUE_SIZE];
+static int CO_TxQueue_Head = 0;
+static int CO_TxQueue_Len = 0;
+
+#define CO_TxQueue_Enqueue(b)  CO_TxQueue[((CO_TxQueue_Head + CO_TxQueue_Len++) % TX_QUEUE_SIZE)] = *b
+#define CO_TxQueue_Dequeue()   &CO_TxQueue[(CO_TxQueue_Len--, CO_TxQueue_Head++ % TX_QUEUE_SIZE)]
+#define CO_TxQueue_IsFull()   (CO_TxQueue_Len >= TX_QUEUE_SIZE)
+#define CO_TxQueue_IsEmpty()  (CO_TxQueue_Len == 0)
+#define CO_TxQueue_Reset()    (CO_TxQueue_Len = 0, CO_TxQueue_Head = 0)
+
+#endif
+
 /* Private macro -------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private variable ----------------------------------------------------------*/
@@ -131,7 +146,9 @@ CO_ReturnError_t CO_CANmodule_init(
     CANmodule->useCANrxFilters = false;
     CANmodule->bufferInhibitFlag = 0;
     CANmodule->firstCANtxMessage = 1;
+#ifndef CO_USE_TX_QUEUE
     CANmodule->CANtxCount = 0;
+#endif
     CANmodule->errOld = 0;
     CANmodule->em = 0;
 
@@ -270,12 +287,14 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
     CO_ReturnError_t err = CO_ERROR_NO;
     uint8_t txRes;
 
+#ifndef CO_USE_TX_QUEUE
     /* Verify overflow */
     if (buffer->bufferFull) {
         if(!CANmodule->firstCANtxMessage) /* don't set error, if bootup message is still on buffers */
             CO_errorReport((CO_EM_t*)CANmodule->em, CO_EM_CAN_TX_OVERFLOW, CO_EMC_CAN_OVERRUN, 0);
         err = CO_ERROR_TX_OVERFLOW;
     }
+#endif
 
     CO_LOCK_CAN_SEND();
 
@@ -285,8 +304,21 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 
     /* No free mailbox -> use interrupt for transmission */
     if (txRes == HAL_BUSY) {
+#ifdef CO_USE_TX_QUEUE
+        if (CO_TxQueue_IsFull())
+        {
+            if(!CANmodule->firstCANtxMessage) /* don't set error, if bootup message is still on buffers */
+                CO_errorReport((CO_EM_t*)CANmodule->em, CO_EM_CAN_TX_OVERFLOW, CO_EMC_CAN_OVERRUN, 0);
+            err = CO_ERROR_TX_OVERFLOW;
+        }
+        else
+        {
+            CO_TxQueue_Enqueue(buffer);
+        }
+#else
         buffer->bufferFull = 1;
         CANmodule->CANtxCount++;
+#endif
     }
     CO_UNLOCK_CAN_SEND();
 
@@ -301,6 +333,23 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
     CAN_HandleTypeDef* hcan = CANmodule->hcan;
 
     CO_LOCK_CAN_SEND();
+
+    /* This function will be called every time the SYNC window closes
+     * (only if the sync window length in us is != 0)
+     * with the purpose of clearing any pending SYNC message which
+     * would be on the way.
+     * In its original implementation, it would first check the global
+     * bufferInhibitFlag (which would be set to true to mark that the
+     * can message in the *SINGLE* hw mailbox was a sync one) and delete it from
+     * there, if present (return value 1).
+     * Then it would check the buffers in the TX Buffers array
+     * and cancel the ones with syncFlag set.
+     *
+     * Notice how clearing the ones in the HW mailbox is still an open
+     * issue, since we're using multiple mailboxes and we don't know
+     * exactly which one we're actually using.
+     */
+
     /* Abort message from CAN module, if there is synchronous TPDO. */
     state = __HAL_CAN_TRANSMIT_STATUS(hcan, CAN_TXMAILBOX_0);
     if((state == CAN_TXSTATUS_PENDING) && (CANmodule->bufferInhibitFlag)) {
@@ -322,6 +371,13 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
         CANmodule->bufferInhibitFlag = false;
         tpdoDeleted = 1U;
     }
+
+#ifdef CO_USE_TX_QUEUE
+    if (!CO_TxQueue_IsEmpty())
+    {
+	// TODO: Invalidate all SYNC messages in the queue
+    }
+#else
     /* delete also pending synchronous TPDOs in TX buffers */
     if(CANmodule->CANtxCount != 0U){
         uint16_t i;
@@ -337,6 +393,7 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
             buffer++;
         }
     }
+#endif
     CO_UNLOCK_CAN_SEND();
 
 
@@ -445,6 +502,17 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
     /* clear flag from previous message */
     CANmodule->bufferInhibitFlag = 0;
 
+#ifdef CO_USE_TX_QUEUE
+    if (!CO_TxQueue_IsEmpty())
+    {
+	/* Pop the first message in the queue and send it for transmission. */
+	/* TODO: only check the ones with bufferFull and repeat until we find one. */
+        CO_CANtx_t *buffer = CO_TxQueue_Dequeue();
+        /* Copy message to CAN buffer */
+        CANmodule->bufferInhibitFlag = buffer->syncFlag;
+        CO_CANsendToModule(CANmodule, buffer);
+    }
+#else
     /* Are there any new messages waiting to be send */
     if (CANmodule->CANtxCount > 0) {
         uint16_t i;             /* index of transmitting message */
@@ -470,6 +538,7 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
         if(i == 0) CANmodule->CANtxCount = 0;
     }
 
+#endif
 	/* Clear all Request Completed mailboxes flags in order to clear the
 	 * Transmit interrupt ( CAN_IT_TME ) */
     hcan->Instance->TSR = CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2;
