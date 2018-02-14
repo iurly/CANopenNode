@@ -823,3 +823,47 @@ void CO_process_TPDO(
         CO_TPDO_process(CO->TPDO[i], CO->SYNC, syncWas, timeDifference_us);
     }
 }
+
+/******************************************************************************/
+void CO_touch_TPDOvar(
+        CO_t                   *CO,
+        void                   *pODData)
+{
+    int16_t i;
+    /* Force PDO send request for all PDOs mapping variable at address pODdata */
+    for(i=0; i<CO_NO_TPDO; i++) {
+        /* only check TPDOs that are not already scheduled for sending */
+        if(!CO->TPDO[i]->sendRequest) {
+            CO->TPDO[i]->sendRequest = CO_TPDOmapsODdata(CO->TPDO[i], pODData);
+        }
+    }
+}
+/******************************************************************************/
+uint32_t CO_get_TPDOmask(
+        CO_t                   *CO,
+        void                   *pODData)
+{
+    int16_t i;
+    uint32_t mask = 1;
+    uint32_t res = 0;
+    /* Get the mask of all PDOs mapping a given variable at address pODdata */
+    for(i=0; i<CO_NO_TPDO && mask != 0; i++) {
+        if (CO_TPDOmapsODdata(CO->TPDO[i], pODData))
+            res |= mask;
+        mask <<= 1;
+    }
+    return res;
+}
+/******************************************************************************/
+void CO_touch_TPDOmask(
+        CO_t                   *CO,
+        uint32_t               mask)
+{
+    int16_t i;
+    /* Force PDO send request for all PDOs of a given mask */
+    for(i=0; i<CO_NO_TPDO && mask != 0; i++) {
+        if (mask & 0x1)
+            CO->TPDO[i]->sendRequest = 1;
+        mask >>= 1;
+    }
+}

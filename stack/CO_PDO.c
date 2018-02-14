@@ -867,6 +867,39 @@ uint8_t CO_TPDOisCOS(CO_TPDO_t *TPDO){
     return 0;
 }
 
+/*
+ * Function for checking whether a given TPDO maps a given variable,
+ * (given its address) so that any time a new value is acquired,
+ * we can re-trigger its transmission, regardless of whether its
+ * value as changed or not.
+ */
+uint8_t CO_TPDOmapsODdata(CO_TPDO_t *TPDO, void* pODdataByte) {
+
+    uint8_t** ppODdataByte;
+
+    ppODdataByte = &TPDO->mapPointer[TPDO->dataLength];
+
+    switch(TPDO->dataLength){
+        case 8: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 7: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 6: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 5: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 4: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 3: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 2: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 1: if(pODdataByte == *(--ppODdataByte)) return 1;
+    }
+
+    return 0;
+}
+
 //#define TPDO_CALLS_EXTENSION
 /******************************************************************************/
 int16_t CO_TPDOsend(CO_TPDO_t *TPDO){
