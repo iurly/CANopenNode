@@ -473,16 +473,15 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
         msgBuff++;
     }
 
-    /* Copy data from hcan buffer to local buffer */
-    CAN1_RxMsg.ident = pRxMsg->StdId;
-    CAN1_RxMsg.ExtId = pRxMsg->ExtId;
-    CAN1_RxMsg.RTR = pRxMsg->RTR;
-    CAN1_RxMsg.DLC = pRxMsg->DLC;
-    memcpy(CAN1_RxMsg.data, pRxMsg->Data, sizeof(CAN1_RxMsg.data));
-    CAN1_RxMsg.FMI = pRxMsg->FMI;
-
     /* Call specific function, which will process the message */
     if (msgMatched && msgBuff->pFunct) {
+        /* Copy data from hcan buffer to local buffer */
+        CAN1_RxMsg.ident = pRxMsg->StdId;
+        CAN1_RxMsg.ExtId = pRxMsg->ExtId;
+        CAN1_RxMsg.RTR = pRxMsg->RTR;
+        CAN1_RxMsg.DLC = pRxMsg->DLC;
+        memcpy(CAN1_RxMsg.data, pRxMsg->Data, sizeof(CAN1_RxMsg.data));
+        CAN1_RxMsg.FMI = pRxMsg->FMI;
         msgBuff->pFunct(msgBuff->object, &CAN1_RxMsg);
     }
 
