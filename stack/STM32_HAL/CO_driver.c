@@ -85,6 +85,7 @@ void CO_CANsetConfigurationMode(int32_t CANbaseAddress){
     CAN_HandleTypeDef* hcan = (CAN_HandleTypeDef*)(CANbaseAddress);
 	hcan->Init.Mode      = CAN_MODE_SILENT;
 	HAL_CAN_Init( hcan );
+    HAL_CAN_Start(hcan);
 }
 
 /******************************************************************************/
@@ -94,6 +95,7 @@ void CO_CANsetNormalMode(CO_CANmodule_t *CANmodule)
     CANmodule->CANnormal = true;
 	hcan->Init.Mode      = CAN_MODE_NORMAL;
 	HAL_CAN_Init( hcan );
+	HAL_CAN_Start(hcan);
 }
 
 /******************************************************************************/
@@ -102,6 +104,7 @@ void CO_CANmodule_disable(CO_CANmodule_t *CANmodule)
     CAN_HandleTypeDef* hcan = CANmodule->hcan;
 	hcan->Init.Mode      = CAN_MODE_SILENT;
 	HAL_CAN_Init( hcan );
+    HAL_CAN_Start(hcan);
 }
 
 /******************************************************************************/
@@ -127,7 +130,7 @@ CO_ReturnError_t CO_CANmodule_init(
         uint16_t                CANbitRate)
 {
     CAN_HandleTypeDef* hcan = (CAN_HandleTypeDef            *)CANbaseAddress;
-	CAN_FilterConfTypeDef CAN_FilterInitStruct;
+    CAN_FilterTypeDef CAN_FilterInitStruct;
 
     int i;
     uint8_t result;
@@ -175,7 +178,7 @@ CO_ReturnError_t CO_CANmodule_init(
     }
 
     memset(&CAN_FilterInitStruct, 0, sizeof (CAN_FilterInitStruct));
-    CAN_FilterInitStruct.FilterNumber = 0;
+    CAN_FilterInitStruct.SlaveStartFilterBank = 0;
     CAN_FilterInitStruct.FilterIdHigh = 0;
     CAN_FilterInitStruct.FilterIdLow = 0;
     CAN_FilterInitStruct.FilterMaskIdHigh = 0;
@@ -199,9 +202,14 @@ CO_ReturnError_t CO_CANmodule_init(
     /* Can_init function of ST Driver puts the controller into the normal mode */
 
     //CAN_ITConfig(hcan, (CAN_IT_TME | CAN_IT_FMP0), ENABLE);
+    HAL_CAN_Start(hcan);
+
+    HAL_CAN_ActivateNotification(hcan,CAN_IT_TX_MAILBOX_EMPTY |
+            CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_RX_FIFO0_FULL | CAN_IT_RX_FIFO0_OVERRUN |
+            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
 
     /* Get ready for RX in interrupt mode */
-    HAL_CAN_Receive_IT(hcan, CAN_FIFO0);
+    //HAL_CAN_Receive_IT(hcan, CAN_FIFO0);
 
     return CO_ERROR_NO;
 }
@@ -351,23 +359,23 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
      */
 
     /* Abort message from CAN module, if there is synchronous TPDO. */
-    state = __HAL_CAN_TRANSMIT_STATUS(hcan, CAN_TXMAILBOX_0);
+    state = HAL_CAN_IsTxMessagePending(hcan, CAN_TX_MAILBOX0);
     if((state == CAN_TXSTATUS_PENDING) && (CANmodule->bufferInhibitFlag)) {
-    	__HAL_CAN_CANCEL_TRANSMIT(hcan, CAN_TXMAILBOX_0);
+        HAL_CAN_AbortTxRequest(hcan, CAN_TX_MAILBOX0);
         CANmodule->bufferInhibitFlag = false;
         tpdoDeleted = 1U;
     }
 
-    state = __HAL_CAN_TRANSMIT_STATUS(hcan, CAN_TXMAILBOX_1);
+    state = HAL_CAN_IsTxMessagePending(hcan, CAN_TX_MAILBOX1);
     if((state == CAN_TXSTATUS_PENDING) && (CANmodule->bufferInhibitFlag)) {
-    	__HAL_CAN_CANCEL_TRANSMIT(hcan, CAN_TXMAILBOX_1);
+        HAL_CAN_AbortTxRequest(hcan, CAN_TX_MAILBOX1);
         CANmodule->bufferInhibitFlag = false;
         tpdoDeleted = 1U;
     }
 
-    state = __HAL_CAN_TRANSMIT_STATUS(hcan, CAN_TXMAILBOX_2);
+    state = HAL_CAN_IsTxMessagePending(hcan, CAN_TX_MAILBOX2);
     if((state == CAN_TXSTATUS_PENDING) && (CANmodule->bufferInhibitFlag)) {
-    	__HAL_CAN_CANCEL_TRANSMIT(hcan, CAN_TXMAILBOX_2);
+        HAL_CAN_AbortTxRequest(hcan, CAN_TX_MAILBOX2);
         CANmodule->bufferInhibitFlag = false;
         tpdoDeleted = 1U;
     }
@@ -455,16 +463,18 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
 {
 	CO_CANrxMsg_t CAN1_RxMsg;
 	CAN_HandleTypeDef* hcan = CANmodule->hcan;
-	CanRxMsgTypeDef *pRxMsg = hcan->pRxMsg;
+    static CAN_RxHeaderTypeDef pRxMsg = {};
+    uint8_t payload[8];
 
     uint16_t index;
     uint8_t msgMatched = 0;
     CO_CANrx_t *msgBuff = CANmodule->rxArray;
 
 	//CAN_Receive(CANmodule->CANbaseAddress, CAN_FilterFIFO0, &CAN1_RxMsg);
+    HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &pRxMsg, &payload[0]);
 
     for (index = 0; index < CANmodule->rxSize; index++) {
-        uint16_t msg = (pRxMsg->StdId << 2) | (pRxMsg->RTR ? 2 : 0);
+        uint16_t msg = (pRxMsg.StdId << 2) | (pRxMsg.RTR ? 2 : 0);
 
         if (((msg ^ msgBuff->ident) & msgBuff->mask) == 0) {
             msgMatched = 1;
@@ -476,17 +486,17 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
     /* Call specific function, which will process the message */
     if (msgMatched && msgBuff->pFunct) {
         /* Copy data from hcan buffer to local buffer */
-        CAN1_RxMsg.ident = pRxMsg->StdId;
-        CAN1_RxMsg.ExtId = pRxMsg->ExtId;
-        CAN1_RxMsg.RTR = pRxMsg->RTR;
-        CAN1_RxMsg.DLC = pRxMsg->DLC;
-        memcpy(CAN1_RxMsg.data, pRxMsg->Data, sizeof(CAN1_RxMsg.data));
-        CAN1_RxMsg.FMI = pRxMsg->FMI;
+        CAN1_RxMsg.ident = pRxMsg.StdId;
+        CAN1_RxMsg.ExtId = pRxMsg.ExtId;
+        CAN1_RxMsg.RTR = pRxMsg.RTR;
+        CAN1_RxMsg.DLC = pRxMsg.DLC;
+        memcpy(CAN1_RxMsg.data, payload, CAN1_RxMsg.DLC);
+        CAN1_RxMsg.FMI = pRxMsg.FilterMatchIndex;
         msgBuff->pFunct(msgBuff->object, &CAN1_RxMsg);
     }
 
     /* Trigger next acquisition */
-    HAL_CAN_Receive_IT(hcan, CAN_FIFO0);
+    //HAL_CAN_Receive_IT(hcan, CAN_FIFO0);
 }
 
 /******************************************************************************/
@@ -542,7 +552,7 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 	 * Transmit interrupt ( CAN_IT_TME ) */
     hcan->Instance->TSR = CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2;
 
-	__HAL_CAN_ENABLE_IT(hcan, CAN_IT_TME);
+	__HAL_CAN_ENABLE_IT(hcan, CAN_IT_TX_MAILBOX_EMPTY);
 
 }
 
@@ -629,30 +639,34 @@ static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CAN
     hcan->Init.Prescaler = prescaler;
 
     hcan->Init.Mode = CAN_MODE_NORMAL;
-    hcan->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
-    hcan->Init.BS1 = CAN_BS1_TQ(bs1);    // changed by VJ, old value = CAN_BS1_3tq;
-    hcan->Init.BS2 = CAN_BS2_TQ(bs2);     // changed by VJ, old value = CAN_BS2_2tq;
-    hcan->Init.NART = DISABLE;         // No Automatic retransmision
-    hcan->Init.TXFP = ENABLE;
+    hcan->Init.SyncJumpWidth = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
+    hcan->Init.TimeSeg1 = CAN_BS1_TQ(bs1);    // changed by VJ, old value = CAN_BS1_3tq;
+    hcan->Init.TimeSeg2 = CAN_BS2_TQ(bs2);     // changed by VJ, old value = CAN_BS2_2tq;
+    hcan->Init.AutoRetransmission = DISABLE;         // No Automatic retransmision
+    hcan->Init.TransmitFifoPriority = ENABLE;
 	/* Enable automatic Bus-Off management (ABOM) so to automatically
 	 * rejoin the bus once the error conditions have been cleared */
-    hcan->Init.ABOM = ENABLE;
+    hcan->Init.AutoBusOff = ENABLE;
 	return HAL_CAN_Init( hcan );
 }
 /******************************************************************************/
 static uint8_t CO_CANsendToModule(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 {
 	CAN_HandleTypeDef* hcan = CANmodule->hcan;
-	CanTxMsgTypeDef *pTxMsg = hcan->pTxMsg;
-	pTxMsg->StdId = buffer->ident;
-	pTxMsg->DLC = buffer->DLC;
-	memcpy(pTxMsg->Data, buffer->data, sizeof(pTxMsg->Data));
+	static CAN_TxHeaderTypeDef pTxMsg = {};
+	uint8_t payload[8];
+	static uint32_t pTxMailbox;
+	pTxMsg.IDE = CAN_ID_STD;
+	pTxMsg.StdId = buffer->ident;
+	pTxMsg.DLC = buffer->DLC;
+	memcpy(payload, buffer->data, pTxMsg.DLC);
 
 	/* Relies on HAL to transmit data.
 	 * NOTE: This assumes HAL would return HAL_BUSY in case of no mailbox available,
 	 *       which may not necessarily be the case!
 	 */
-	return HAL_CAN_Transmit_IT(hcan);
+	//return HAL_CAN_Transmit_IT(hcan);
+	return HAL_CAN_AddTxMessage(hcan, &pTxMsg, &payload[0], &pTxMailbox);
 
 }
 
