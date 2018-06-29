@@ -83,7 +83,11 @@ static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CAN
 /******************************************************************************/
 void CO_CANsetConfigurationMode(int32_t CANbaseAddress){
     CAN_HandleTypeDef* hcan = (CAN_HandleTypeDef*)(CANbaseAddress);
+
+    HAL_CAN_Stop(hcan);
+
 	hcan->Init.Mode      = CAN_MODE_SILENT;
+
 	HAL_CAN_Init( hcan );
     HAL_CAN_Start(hcan);
 }
@@ -92,8 +96,12 @@ void CO_CANsetConfigurationMode(int32_t CANbaseAddress){
 void CO_CANsetNormalMode(CO_CANmodule_t *CANmodule)
 {
     CAN_HandleTypeDef* hcan = CANmodule->hcan;
+
+    HAL_CAN_Stop(hcan);
+
     CANmodule->CANnormal = true;
 	hcan->Init.Mode      = CAN_MODE_NORMAL;
+
 	HAL_CAN_Init( hcan );
 	HAL_CAN_Start(hcan);
 }
@@ -102,8 +110,12 @@ void CO_CANsetNormalMode(CO_CANmodule_t *CANmodule)
 void CO_CANmodule_disable(CO_CANmodule_t *CANmodule)
 {
     CAN_HandleTypeDef* hcan = CANmodule->hcan;
-	hcan->Init.Mode      = CAN_MODE_SILENT;
-	HAL_CAN_Init( hcan );
+
+    HAL_CAN_Stop(hcan);
+
+    hcan->Init.Mode      = CAN_MODE_SILENT;
+
+    HAL_CAN_Init( hcan );
     HAL_CAN_Start(hcan);
 }
 
@@ -635,6 +647,8 @@ static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CAN
         return HAL_ERROR;
     }
 
+    HAL_CAN_Stop(hcan);
+
     /* Configure CAN address relying on HAL */
     hcan->Init.Prescaler = prescaler;
 
@@ -647,7 +661,10 @@ static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CAN
 	/* Enable automatic Bus-Off management (ABOM) so to automatically
 	 * rejoin the bus once the error conditions have been cleared */
     hcan->Init.AutoBusOff = ENABLE;
-	return HAL_CAN_Init( hcan );
+
+    HAL_CAN_Init( hcan );
+    return HAL_CAN_Start( hcan );
+
 }
 /******************************************************************************/
 static uint8_t CO_CANsendToModule(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
