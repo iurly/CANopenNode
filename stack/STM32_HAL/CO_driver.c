@@ -323,7 +323,7 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
     txRes = CO_CANsendToModule(CANmodule, buffer);
 
     /* No free mailbox -> use interrupt for transmission */
-    if (txRes == HAL_BUSY) {
+    if (txRes != HAL_OK) {
 #ifdef CO_USE_TX_QUEUE
         if (CO_TxQueue_IsFull())
         {
@@ -482,6 +482,9 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
     uint8_t msgMatched = 0;
     CO_CANrx_t *msgBuff = CANmodule->rxArray;
 
+    HAL_CAN_DeactivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING |
+            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
+
 	//CAN_Receive(CANmodule->CANbaseAddress, CAN_FilterFIFO0, &CAN1_RxMsg);
     HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &pRxMsg, &payload[0]);
 
@@ -508,8 +511,8 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
     }
 
     /* Trigger next acquisition */
-    //HAL_CAN_Receive_IT(hcan, CAN_FIFO0);
-}
+    HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING |
+            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);}
 
 /******************************************************************************/
 /* Interrupt from trasmitter */
@@ -522,6 +525,9 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 
     /* clear flag from previous message */
     CANmodule->bufferInhibitFlag = 0;
+
+    HAL_CAN_DeactivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY |
+            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
 
 #ifdef CO_USE_TX_QUEUE
     if (!CO_TxQueue_IsEmpty())
@@ -564,8 +570,8 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 	 * Transmit interrupt ( CAN_IT_TME ) */
     hcan->Instance->TSR = CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2;
 
-	__HAL_CAN_ENABLE_IT(hcan, CAN_IT_TX_MAILBOX_EMPTY);
-
+    HAL_CAN_ActivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY |
+            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
 }
 
 /** **************************************************************************
@@ -653,10 +659,15 @@ static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CAN
     hcan->Init.Prescaler = prescaler;
 
     hcan->Init.Mode = CAN_MODE_NORMAL;
-    hcan->Init.SyncJumpWidth = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
-    hcan->Init.TimeSeg1 = CAN_BS1_TQ(bs1);    // changed by VJ, old value = CAN_BS1_3tq;
-    hcan->Init.TimeSeg2 = CAN_BS2_TQ(bs2);     // changed by VJ, old value = CAN_BS2_2tq;
-    hcan->Init.AutoRetransmission = DISABLE;         // No Automatic retransmision
+    hcan->Init.SyncJumpWidth = CAN_SJW_1TQ;
+    hcan->Init.TimeSeg1 = CAN_BS1_TQ(bs1);
+    hcan->Init.TimeSeg2 = CAN_BS2_TQ(bs2);
+
+    /*********************************************************************************************/
+    /*Please notice that starting from STM32HAL_L4 v1.11 this flag has opposite logic than before*/
+    hcan->Init.AutoRetransmission = ENABLE;         // No Automatic retransmision
+    /*********************************************************************************************/
+
     hcan->Init.TransmitFifoPriority = ENABLE;
 	/* Enable automatic Bus-Off management (ABOM) so to automatically
 	 * rejoin the bus once the error conditions have been cleared */
@@ -679,11 +690,26 @@ static uint8_t CO_CANsendToModule(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 	memcpy(payload, buffer->data, pTxMsg.DLC);
 
 	/* Relies on HAL to transmit data.
-	 * NOTE: This assumes HAL would return HAL_BUSY in case of no mailbox available,
+	 * NOTE: This assumes HAL would return HAL_ERROR in case of no mailbox available,
 	 *       which may not necessarily be the case!
 	 */
-	//return HAL_CAN_Transmit_IT(hcan);
-	return HAL_CAN_AddTxMessage(hcan, &pTxMsg, &payload[0], &pTxMailbox);
+	if(HAL_CAN_GetTxMailboxesFreeLevel(hcan) > 0)
+	{
+	    HAL_CAN_AddTxMessage(hcan, &pTxMsg, &payload[0], &pTxMailbox);
+	    if(hcan->ErrorCode != HAL_CAN_ERROR_NONE)
+	    {
+	        return HAL_ERROR;
+	    }
+	    else
+	    {
+	        return HAL_OK;
+	    }
+	}
+	else
+	{
+	    return HAL_ERROR;
+	}
+
 
 }
 
