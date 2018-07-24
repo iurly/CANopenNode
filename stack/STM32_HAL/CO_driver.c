@@ -592,10 +592,12 @@ static int CAN_FindBitQuanta(uint32_t clkFreq, uint32_t bitrate,
         uint32_t *prescaler, uint8_t *bs1, uint8_t *bs2)
 {
     int bq_settings[][2] = {
-        { 14, 5 }, /* total 20, 15/20 sample point 75% */
-        {  8, 3 }, /* total 12, 9/12  sample point 75% */
-        { 11, 4 }, /* total 16, 12/16 sample point 75% */
-        { 10, 4 }, /* total 15, 11/15 sample point 73.3% */
+        { 15, 2 }, /* total 18, 16/18 sample point 88.89% for 72MHz*/
+        { 13, 2 }, /* total 16, 14/16 sample point 87.5% for 32/48/64/80MHz*/
+        { 14, 5 }, /* total 20, 15/20 sample point 75% for 20/40/60/80MHz*/
+        {  8, 3 }, /* total 12, 9/12  sample point 75% for 36/48/72MHz*/
+        { 11, 4 }, /* total 16, 12/16 sample point 75% for 32/48/64/80MHz*/
+        { 10, 4 }, /* total 15, 11/15 sample point 73.3% 30/45/60/75MHz*/
     };
     int ns = sizeof(bq_settings) / sizeof(bq_settings[0]);
     int i;
