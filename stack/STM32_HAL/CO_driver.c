@@ -511,8 +511,8 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
     }
 
     /* Trigger next acquisition */
-    HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING |
-            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);}
+    HAL_CAN_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+}
 
 /******************************************************************************/
 /* Interrupt from trasmitter */
@@ -570,10 +570,20 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 	 * Transmit interrupt ( CAN_IT_TME ) */
     hcan->Instance->TSR = CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2;
 
-    HAL_CAN_ActivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY |
-            CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
+    HAL_CAN_ActivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY);
 }
 
+void CO_CANinterrupt_Err(CO_CANmodule_t *CANmodule)
+{
+    CAN_HandleTypeDef* hcan = CANmodule->hcan;
+
+    hcan->ErrorCode = HAL_CAN_ERROR_NONE;
+    HAL_CAN_DeactivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY | CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
+    HAL_CAN_Stop(hcan);
+    HAL_CAN_Start(hcan);
+    HAL_CAN_ActivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY | CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
+
+}
 /** **************************************************************************
  ** @brief Function-line macros to convert bit quanta to bit settings
  ** *************************************************************************/
@@ -695,6 +705,8 @@ static uint8_t CO_CANsendToModule(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 	 */
 	if(HAL_CAN_GetTxMailboxesFreeLevel(hcan) > 0)
 	{
+	    HAL_CAN_ActivateNotification(hcan, CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE | CAN_IT_ERROR);
+
 	    HAL_CAN_AddTxMessage(hcan, &pTxMsg, &payload[0], &pTxMailbox);
 	    if(hcan->ErrorCode != HAL_CAN_ERROR_NONE)
 	    {
