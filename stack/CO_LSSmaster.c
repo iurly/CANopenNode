@@ -237,6 +237,19 @@ static CO_LSSmaster_return_t CO_LSSmaster_switchStateSelectInitiate(
 {
   CO_LSSmaster_return_t ret;
 
+
+/*
+ * This is a quick hack to allow the procedure to work with e.g. C2C devices
+ * which are slow in processing the 4 LSS select messages if they're too close
+ * WARNING: This will only work with FreeRTOS / CMSIS-OS!!!
+ */
+#ifdef __CO_LSSMASTER_SELECT_DELAY
+#	define __DELAY()       osDelay(__CO_LSSMASTER_SELECT_DELAY)
+#else
+#	define __DELAY()       do {} while (0)
+#endif
+
+
   if (lssAddress != NULL) {
       /* switch state select specific using LSS address */
       LSSmaster->state = CO_LSSmaster_STATE_CFG_SLECTIVE;
@@ -248,12 +261,15 @@ static CO_LSSmaster_return_t CO_LSSmaster_switchStateSelectInitiate(
       LSSmaster->TXbuff->data[0] = CO_LSS_SWITCH_STATE_SEL_VENDOR;
       CO_setUint32(&LSSmaster->TXbuff->data[1], lssAddress->vendorID);
       CO_CANsend(LSSmaster->CANdevTx, LSSmaster->TXbuff);
+      __DELAY();
       LSSmaster->TXbuff->data[0] = CO_LSS_SWITCH_STATE_SEL_PRODUCT;
       CO_setUint32(&LSSmaster->TXbuff->data[1], lssAddress->productCode);
       CO_CANsend(LSSmaster->CANdevTx, LSSmaster->TXbuff);
+      __DELAY();
       LSSmaster->TXbuff->data[0] = CO_LSS_SWITCH_STATE_SEL_REV;
       CO_setUint32(&LSSmaster->TXbuff->data[1], lssAddress->revisionNumber);
       CO_CANsend(LSSmaster->CANdevTx, LSSmaster->TXbuff);
+      __DELAY();
       LSSmaster->TXbuff->data[0] = CO_LSS_SWITCH_STATE_SEL_SERIAL;
       CO_setUint32(&LSSmaster->TXbuff->data[1], lssAddress->serialNumber);
       CO_CANsend(LSSmaster->CANdevTx, LSSmaster->TXbuff);
