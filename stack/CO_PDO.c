@@ -168,7 +168,16 @@ static void CO_TPDOconfigCom(CO_TPDO_t* TPDO, uint32_t COB_IDUsedByTPDO, uint8_t
     /* is TPDO used? */
     if((COB_IDUsedByTPDO & 0xBFFFF800L) == 0 && TPDO->dataLength && ID){
         /* is used default COB-ID? */
+
+#ifdef CANOPEN_TPDO_ADD_NODE_ID
+        /*TEST: comment out this check to always add nodeId to COB_IDUsedByTPDO
+         * In this way you can transmit more than 4 different TPDOS using one of two different approaches:
+         * A) reuse the same default COB_ID, e.g. 0x480+nodeId
+         * B) use different COB_IDs as if coming from different nodes, e.g. 0x481+nodeId (WARNING: select nodeIds wisely) */
+        ID += TPDO->nodeId;
+#else
         if(ID == TPDO->defaultCOB_ID) ID += TPDO->nodeId;
+#endif
         TPDO->valid = true;
     }
     else{
@@ -814,7 +823,12 @@ CO_ReturnError_t CO_TPDO_init(
     TPDO->syncCounter = 255;
     TPDO->inhibitTimer = 0;
     TPDO->eventTimer = ((uint32_t) TPDOCommPar->eventTimer) * 1000;
+
+#ifdef CANOPEN_SILENT_STARTUP
+        TPDO->sendRequest = 0;
+#else
     if(TPDOCommPar->transmissionType>=254) TPDO->sendRequest = 1;
+#endif
 
     CO_TPDOconfigMap(TPDO, TPDOMapPar->numberOfMappedObjects);
     CO_TPDOconfigCom(TPDO, TPDOCommPar->COB_IDUsedByTPDO, ((TPDOCommPar->transmissionType<=240) ? 1 : 0));
@@ -848,6 +862,39 @@ uint8_t CO_TPDOisCOS(CO_TPDO_t *TPDO){
         case 3: if(*(--pPDOdataByte) != **(--ppODdataByte) && (TPDO->sendIfCOSFlags&0x04)) return 1;
         case 2: if(*(--pPDOdataByte) != **(--ppODdataByte) && (TPDO->sendIfCOSFlags&0x02)) return 1;
         case 1: if(*(--pPDOdataByte) != **(--ppODdataByte) && (TPDO->sendIfCOSFlags&0x01)) return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * Function for checking whether a given TPDO maps a given variable,
+ * (given its address) so that any time a new value is acquired,
+ * we can re-trigger its transmission, regardless of whether its
+ * value as changed or not.
+ */
+uint8_t CO_TPDOmapsODdata(CO_TPDO_t *TPDO, void* pODdataByte) {
+
+    uint8_t** ppODdataByte;
+
+    ppODdataByte = &TPDO->mapPointer[TPDO->dataLength];
+
+    switch(TPDO->dataLength){
+        case 8: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 7: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 6: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 5: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 4: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 3: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 2: if(pODdataByte == *(--ppODdataByte)) return 1;
+        /* no break */
+        case 1: if(pODdataByte == *(--ppODdataByte)) return 1;
     }
 
     return 0;
@@ -1018,9 +1065,13 @@ void CO_TPDO_process(
 
     }
     else{
+#ifdef CANOPEN_SILENT_STARTUP
+        TPDO->sendRequest = 0;
+#else
         /* Not operational or valid. Force TPDO first send after operational or valid. */
         if(TPDO->TPDOCommPar->transmissionType>=254) TPDO->sendRequest = 1;
         else                                         TPDO->sendRequest = 0;
+#endif
     }
 
     /* update timers */

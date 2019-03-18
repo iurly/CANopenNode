@@ -352,6 +352,13 @@ CO_ReturnError_t CO_TPDO_init(
  */
 uint8_t CO_TPDOisCOS(CO_TPDO_t *TPDO);
 
+/**
+ * Function for checking whether a given TPDO maps a given variable,
+ * (given its address) so that any time a new value is acquired,
+ * we can re-trigger its transmission, regardless of whether its
+ * value as changed or not.
+ */
+uint8_t CO_TPDOmapsODdata(CO_TPDO_t *TPDO, void* pODdataByte);
 
 /**
  * Send TPDO message.

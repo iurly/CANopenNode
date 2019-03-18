@@ -165,7 +165,9 @@ typedef struct{
     uint32_t            ident;
     uint8_t             DLC;
     uint8_t             data[8];
+//#ifndef CO_USE_TX_QUEUE
     volatile uint8_t    bufferFull;
+//#endif
     volatile uint8_t    syncFlag;
 }CO_CANtx_t;/* ALIGN_STRUCT_DWORD; */
 
@@ -182,7 +184,9 @@ typedef struct{
     //volatile uint8_t    useCANrxFilters;
     volatile uint8_t    bufferInhibitFlag;
     volatile uint8_t    firstCANtxMessage;
+#ifndef CO_USE_TX_QUEUE
     volatile uint16_t   CANtxCount;
+#endif
     uint32_t            errOld;
     void               *em;
 }CO_CANmodule_t;

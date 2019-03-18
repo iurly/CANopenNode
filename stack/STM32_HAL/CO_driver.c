@@ -52,6 +52,21 @@
 #include "CO_Emergency.h"
 #include <string.h>
 
+#ifdef CO_USE_TX_QUEUE
+#define TX_QUEUE_SIZE 16
+
+static CO_CANtx_t CO_TxQueue[TX_QUEUE_SIZE];
+static int CO_TxQueue_Head = 0;
+static int CO_TxQueue_Len = 0;
+
+#define CO_TxQueue_Enqueue(b)  CO_TxQueue[((CO_TxQueue_Head + CO_TxQueue_Len++) % TX_QUEUE_SIZE)] = *b
+#define CO_TxQueue_Dequeue()   &CO_TxQueue[(CO_TxQueue_Len--, CO_TxQueue_Head++ % TX_QUEUE_SIZE)]
+#define CO_TxQueue_IsFull()   (CO_TxQueue_Len >= TX_QUEUE_SIZE)
+#define CO_TxQueue_IsEmpty()  (CO_TxQueue_Len == 0)
+#define CO_TxQueue_Reset()    (CO_TxQueue_Len = 0, CO_TxQueue_Head = 0)
+
+#endif
+
 /* Private macro -------------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private variable ----------------------------------------------------------*/
@@ -131,7 +146,9 @@ CO_ReturnError_t CO_CANmodule_init(
     CANmodule->useCANrxFilters = false;
     CANmodule->bufferInhibitFlag = 0;
     CANmodule->firstCANtxMessage = 1;
+#ifndef CO_USE_TX_QUEUE
     CANmodule->CANtxCount = 0;
+#endif
     CANmodule->errOld = 0;
     CANmodule->em = 0;
 
@@ -270,12 +287,14 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
     CO_ReturnError_t err = CO_ERROR_NO;
     uint8_t txRes;
 
+#ifndef CO_USE_TX_QUEUE
     /* Verify overflow */
     if (buffer->bufferFull) {
         if(!CANmodule->firstCANtxMessage) /* don't set error, if bootup message is still on buffers */
             CO_errorReport((CO_EM_t*)CANmodule->em, CO_EM_CAN_TX_OVERFLOW, CO_EMC_CAN_OVERRUN, 0);
         err = CO_ERROR_TX_OVERFLOW;
     }
+#endif
 
     CO_LOCK_CAN_SEND();
 
@@ -285,8 +304,21 @@ CO_ReturnError_t CO_CANsend(CO_CANmodule_t *CANmodule, CO_CANtx_t *buffer)
 
     /* No free mailbox -> use interrupt for transmission */
     if (txRes == HAL_BUSY) {
+#ifdef CO_USE_TX_QUEUE
+        if (CO_TxQueue_IsFull())
+        {
+            if(!CANmodule->firstCANtxMessage) /* don't set error, if bootup message is still on buffers */
+                CO_errorReport((CO_EM_t*)CANmodule->em, CO_EM_CAN_TX_OVERFLOW, CO_EMC_CAN_OVERRUN, 0);
+            err = CO_ERROR_TX_OVERFLOW;
+        }
+        else
+        {
+            CO_TxQueue_Enqueue(buffer);
+        }
+#else
         buffer->bufferFull = 1;
         CANmodule->CANtxCount++;
+#endif
     }
     CO_UNLOCK_CAN_SEND();
 
@@ -301,6 +333,23 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
     CAN_HandleTypeDef* hcan = CANmodule->hcan;
 
     CO_LOCK_CAN_SEND();
+
+    /* This function will be called every time the SYNC window closes
+     * (only if the sync window length in us is != 0)
+     * with the purpose of clearing any pending SYNC message which
+     * would be on the way.
+     * In its original implementation, it would first check the global
+     * bufferInhibitFlag (which would be set to true to mark that the
+     * can message in the *SINGLE* hw mailbox was a sync one) and delete it from
+     * there, if present (return value 1).
+     * Then it would check the buffers in the TX Buffers array
+     * and cancel the ones with syncFlag set.
+     *
+     * Notice how clearing the ones in the HW mailbox is still an open
+     * issue, since we're using multiple mailboxes and we don't know
+     * exactly which one we're actually using.
+     */
+
     /* Abort message from CAN module, if there is synchronous TPDO. */
     state = __HAL_CAN_TRANSMIT_STATUS(hcan, CAN_TXMAILBOX_0);
     if((state == CAN_TXSTATUS_PENDING) && (CANmodule->bufferInhibitFlag)) {
@@ -322,6 +371,13 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
         CANmodule->bufferInhibitFlag = false;
         tpdoDeleted = 1U;
     }
+
+#ifdef CO_USE_TX_QUEUE
+    if (!CO_TxQueue_IsEmpty())
+    {
+	// TODO: Invalidate all SYNC messages in the queue
+    }
+#else
     /* delete also pending synchronous TPDOs in TX buffers */
     if(CANmodule->CANtxCount != 0U){
         uint16_t i;
@@ -337,6 +393,7 @@ void CO_CANclearPendingSyncPDOs(CO_CANmodule_t *CANmodule)
             buffer++;
         }
     }
+#endif
     CO_UNLOCK_CAN_SEND();
 
 
@@ -416,16 +473,15 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
         msgBuff++;
     }
 
-    /* Copy data from hcan buffer to local buffer */
-    CAN1_RxMsg.ident = pRxMsg->StdId;
-    CAN1_RxMsg.ExtId = pRxMsg->ExtId;
-    CAN1_RxMsg.RTR = pRxMsg->RTR;
-    CAN1_RxMsg.DLC = pRxMsg->DLC;
-    memcpy(CAN1_RxMsg.data, pRxMsg->Data, sizeof(CAN1_RxMsg.data));
-    CAN1_RxMsg.FMI = pRxMsg->FMI;
-
     /* Call specific function, which will process the message */
     if (msgMatched && msgBuff->pFunct) {
+        /* Copy data from hcan buffer to local buffer */
+        CAN1_RxMsg.ident = pRxMsg->StdId;
+        CAN1_RxMsg.ExtId = pRxMsg->ExtId;
+        CAN1_RxMsg.RTR = pRxMsg->RTR;
+        CAN1_RxMsg.DLC = pRxMsg->DLC;
+        memcpy(CAN1_RxMsg.data, pRxMsg->Data, sizeof(CAN1_RxMsg.data));
+        CAN1_RxMsg.FMI = pRxMsg->FMI;
         msgBuff->pFunct(msgBuff->object, &CAN1_RxMsg);
     }
 
@@ -445,6 +501,17 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
     /* clear flag from previous message */
     CANmodule->bufferInhibitFlag = 0;
 
+#ifdef CO_USE_TX_QUEUE
+    if (!CO_TxQueue_IsEmpty())
+    {
+	/* Pop the first message in the queue and send it for transmission. */
+	/* TODO: only check the ones with bufferFull and repeat until we find one. */
+        CO_CANtx_t *buffer = CO_TxQueue_Dequeue();
+        /* Copy message to CAN buffer */
+        CANmodule->bufferInhibitFlag = buffer->syncFlag;
+        CO_CANsendToModule(CANmodule, buffer);
+    }
+#else
     /* Are there any new messages waiting to be send */
     if (CANmodule->CANtxCount > 0) {
         uint16_t i;             /* index of transmitting message */
@@ -470,6 +537,7 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
         if(i == 0) CANmodule->CANtxCount = 0;
     }
 
+#endif
 	/* Clear all Request Completed mailboxes flags in order to clear the
 	 * Transmit interrupt ( CAN_IT_TME ) */
     hcan->Instance->TSR = CAN_TSR_RQCP0 | CAN_TSR_RQCP1 | CAN_TSR_RQCP2;
@@ -478,16 +546,92 @@ void CO_CANinterrupt_Tx(CO_CANmodule_t *CANmodule)
 
 }
 
+/** **************************************************************************
+ ** @brief Function-line macros to convert bit quanta to bit settings
+ ** *************************************************************************/
+
+#define CAN_BS1_TQ(n) \
+        (n ==  1) ? CAN_BS1_1TQ : \
+        (n ==  2) ? CAN_BS1_2TQ : \
+        (n ==  3) ? CAN_BS1_3TQ : \
+        (n ==  4) ? CAN_BS1_4TQ : \
+        (n ==  5) ? CAN_BS1_5TQ : \
+        (n ==  6) ? CAN_BS1_6TQ : \
+        (n ==  7) ? CAN_BS1_7TQ : \
+        (n ==  8) ? CAN_BS1_8TQ : \
+        (n ==  9) ? CAN_BS1_9TQ : \
+        (n == 10) ? CAN_BS1_10TQ : \
+        (n == 11) ? CAN_BS1_11TQ : \
+        (n == 12) ? CAN_BS1_12TQ : \
+        (n == 13) ? CAN_BS1_13TQ : \
+        (n == 14) ? CAN_BS1_14TQ : \
+        (n == 15) ? CAN_BS1_15TQ : \
+        (n == 16) ? CAN_BS1_16TQ : 0
+
+
+#define CAN_BS2_TQ(n) \
+        (n ==  2) ? CAN_BS2_2TQ : \
+        (n ==  3) ? CAN_BS2_3TQ : \
+        (n ==  4) ? CAN_BS2_4TQ : \
+        (n ==  5) ? CAN_BS2_5TQ : \
+        (n ==  6) ? CAN_BS2_6TQ : \
+        (n ==  7) ? CAN_BS2_7TQ : \
+        (n ==  8) ? CAN_BS2_8TQ : 0
+
+/** **************************************************************************
+ ** @brief  Find suitable prescaler and bitquanta settings
+ **         for the desidered bitrate, given the current clock frequency
+ ** @param clkFreq  clock frequency in Hz
+ ** @param bitrate  desired bitrate
+ ** @param out prescaler  prescaler
+ ** @param out bs1  BS1 time quanta
+ ** @param out bs2  BS2 time quanta
+ ** @return     1 if the function terminates correctly, 0 in case of errors
+ ** *************************************************************************/
+static int CAN_FindBitQuanta(uint32_t clkFreq, uint32_t bitrate,
+        uint32_t *prescaler, uint8_t *bs1, uint8_t *bs2)
+{
+    int bq_settings[][2] = {
+        { 14, 5 }, /* total 20, 15/20 sample point 75% */
+        {  8, 3 }, /* total 12, 9/12  sample point 75% */
+        { 11, 4 }, /* total 16, 12/16 sample point 75% */
+        { 10, 4 }, /* total 15, 11/15 sample point 73.3% */
+    };
+    int ns = sizeof(bq_settings) / sizeof(bq_settings[0]);
+    int i;
+
+    for (i = 0; i < ns; i++)
+    {
+        uint8_t n1 = bq_settings[i][0];
+        uint8_t n2 = bq_settings[i][1];
+        uint32_t nt = n1 + n2 + 1;
+        if (clkFreq % (nt*bitrate) == 0)
+        {
+            if (bs1) *bs1 = n1;
+            if (bs2) *bs2 = n2;
+            if (prescaler) *prescaler = clkFreq / (nt * bitrate);
+            return 1;
+        }
+    }
+    return 0;
+}
 /******************************************************************************/
 static HAL_StatusTypeDef  CO_CANsetBitrate(CAN_HandleTypeDef* hcan, uint16_t CANbitRate)
 {
+    uint32_t prescaler;
+    uint8_t bs1, bs2;
+    if (CAN_FindBitQuanta(HAL_RCC_GetPCLK1Freq(), CANbitRate*1000, &prescaler, &bs1, &bs2) == 0)
+    {
+        return HAL_ERROR;
+    }
+
     /* Configure CAN address relying on HAL */
-    hcan->Init.Prescaler = HAL_RCC_GetPCLK1Freq() / ( (14 + 5 + 1) * (CANbitRate*1000) );
+    hcan->Init.Prescaler = prescaler;
 
     hcan->Init.Mode = CAN_MODE_NORMAL;
     hcan->Init.SJW = CAN_SJW_1TQ;     // changed by VJ, old value = CAN_SJW_1tq;
-    hcan->Init.BS1 = CAN_BS1_14TQ;    // changed by VJ, old value = CAN_BS1_3tq;
-    hcan->Init.BS2 = CAN_BS2_5TQ;     // changed by VJ, old value = CAN_BS2_2tq;
+    hcan->Init.BS1 = CAN_BS1_TQ(bs1);    // changed by VJ, old value = CAN_BS1_3tq;
+    hcan->Init.BS2 = CAN_BS2_TQ(bs2);     // changed by VJ, old value = CAN_BS2_2tq;
     hcan->Init.NART = DISABLE;         // No Automatic retransmision
     hcan->Init.TXFP = ENABLE;
 	/* Enable automatic Bus-Off management (ABOM) so to automatically

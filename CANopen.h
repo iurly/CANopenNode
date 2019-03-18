@@ -311,6 +311,48 @@ void CO_process_TPDO(
         bool_t                  syncWas,
         uint32_t                timeDifference_us);
 
+/**
+ * Touch CANopen TPDO objects.
+ *
+ * Function must be called every time all TPDOs mapping a given variable should be
+ * scheduled for transmission.
+ * Alternatively, for performance reasons CO_get_TPDOmask() can be called once,
+ * and CO_touch_TPDOmask() can be called to trigger transmission.
+ *
+ * @param CO This object.
+ * @param pODData Pointer to the data being affected (touched).
+ */
+
+void CO_touch_TPDOvar(
+        CO_t                   *CO,
+        void                   *pODData);
+
+/**
+ * Get mask of TPDOs mapping a given variable (given its address)
+ *
+ * Function must be called at startup or after mapping reconfiguration
+ * to get all TPODs mapping a given variable.
+ *
+ * @param CO This object.
+ * @param pODData Pointer to the data being affected (touched).
+ */
+
+uint32_t CO_get_TPDOmask(
+        CO_t                   *CO,
+        void                   *pODData);
+
+/**
+ * Touch (sendRequest) all TPDOs of a given mask.
+ *
+ * Function must be called to trigger transmission of TPDOs.
+ *
+ * @param CO This object.
+ * @param mask bitmask of TPDOs to send
+ */
+void CO_touch_TPDOmask(
+        CO_t                   *CO,
+        uint32_t               mask);
+
 #ifdef __cplusplus
 }
 #endif /*__cplusplus*/
