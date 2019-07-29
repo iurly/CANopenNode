@@ -337,7 +337,7 @@ void CO_touch_TPDOvar(
  * @param pODData Pointer to the data being affected (touched).
  */
 
-uint32_t CO_get_TPDOmask(
+uint64_t CO_get_TPDOmask(
         CO_t                   *CO,
         void                   *pODData);
 
@@ -351,7 +351,7 @@ uint32_t CO_get_TPDOmask(
  */
 void CO_touch_TPDOmask(
         CO_t                   *CO,
-        uint32_t               mask);
+        uint64_t               mask);
 
 #ifdef __cplusplus
 }

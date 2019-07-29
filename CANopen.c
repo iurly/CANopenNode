@@ -839,13 +839,13 @@ void CO_touch_TPDOvar(
     }
 }
 /******************************************************************************/
-uint32_t CO_get_TPDOmask(
+uint64_t CO_get_TPDOmask(
         CO_t                   *CO,
         void                   *pODData)
 {
     int16_t i;
-    uint32_t mask = 1;
-    uint32_t res = 0;
+    uint64_t mask = 1;
+    uint64_t res = 0;
     /* Get the mask of all PDOs mapping a given variable at address pODdata */
     for(i=0; i<CO_NO_TPDO && mask != 0; i++) {
         if (CO_TPDOmapsODdata(CO->TPDO[i], pODData))
@@ -857,7 +857,7 @@ uint32_t CO_get_TPDOmask(
 /******************************************************************************/
 void CO_touch_TPDOmask(
         CO_t                   *CO,
-        uint32_t               mask)
+        uint64_t               mask)
 {
     int16_t i;
     /* Force PDO send request for all PDOs of a given mask */
