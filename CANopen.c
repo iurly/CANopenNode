@@ -819,7 +819,11 @@ void CO_process_TPDO(
 
     /* Verify PDO Change Of State and process PDOs */
     for(i=0; i<CO_NO_TPDO; i++){
-        if(!CO->TPDO[i]->sendRequest) CO->TPDO[i]->sendRequest = CO_TPDOisCOS(CO->TPDO[i]);
+        /*
+         * The logic of checking Change of State has been moved within CO_TPDO_process()
+         * to fix a potential race condition.
+         */
+        /*if(!CO->TPDO[i]->sendRequest) CO->TPDO[i]->sendRequest = CO_TPDOisCOS(CO->TPDO[i]); */
         CO_TPDO_process(CO->TPDO[i], CO->SYNC, syncWas, timeDifference_us);
     }
 }

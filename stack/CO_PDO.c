@@ -1020,11 +1020,30 @@ void CO_TPDO_process(
         bool_t                  syncWas,
         uint32_t                timeDifference_us)
 {
+
+    /* Initialize variable with current status */
+    bool_t sendRequest = TPDO->sendRequest;
+
+    if(!sendRequest) {
+        /*
+         * If the sendRequest flag has already been set, there is no need to check again if a CoS happened.
+         * If not, we check.
+         * However, we do not change TPDO->sendRequest directly but use a local variable instead, to
+         * prevent overwriting sendRequests which might have happened in between.
+         */
+        sendRequest = CO_TPDOisCOS(TPDO);
+        /*
+         * Notice there is a slight chance of a race condition where sendRequest is being set to 1
+         * for multiple TPDOs at once (eg 1,2,3,4) from interrupt context, while this function is being called from within a loop.
+         * This means that instead of 1,2,3,4 you get for instance 3,4,1,2, which is in some sense still OK.
+         */
+    }
+
     if(TPDO->valid && *TPDO->operatingState == CO_NMT_OPERATIONAL){
 
         /* Send PDO by application request or by Event timer */
         if(TPDO->TPDOCommPar->transmissionType >= 253){
-            if(TPDO->inhibitTimer == 0 && (TPDO->sendRequest || (TPDO->TPDOCommPar->eventTimer && TPDO->eventTimer == 0))){
+            if(TPDO->inhibitTimer == 0 && (sendRequest || (TPDO->TPDOCommPar->eventTimer && TPDO->eventTimer == 0))){
                 if(CO_TPDOsend(TPDO) == CO_ERROR_NO){
                     /* successfully sent */
                     TPDO->inhibitTimer = ((uint32_t) TPDO->TPDOCommPar->inhibitTime) * 100;
@@ -1037,7 +1056,7 @@ void CO_TPDO_process(
         else if(SYNC && syncWas){
             /* send synchronous acyclic PDO */
             if(TPDO->TPDOCommPar->transmissionType == 0){
-                if(TPDO->sendRequest) CO_TPDOsend(TPDO);
+                if(sendRequest) CO_TPDOsend(TPDO);
             }
             /* send synchronous cyclic PDO */
             else{
