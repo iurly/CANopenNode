@@ -451,7 +451,7 @@ void CO_CANverifyErrors(CO_CANmodule_t *CANmodule)
 
 /******************************************************************************/
 /* Interrupt from receiver */
-void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
+bool_t CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
 {
 	CO_CANrxMsg_t CAN1_RxMsg;
 	CAN_HandleTypeDef* hcan = CANmodule->hcan;
@@ -487,6 +487,7 @@ void CO_CANinterrupt_Rx(CO_CANmodule_t *CANmodule)
 
     /* Trigger next acquisition */
     HAL_CAN_Receive_IT(hcan, CAN_FIFO0);
+    return msgMatched;
 }
 
 /******************************************************************************/
