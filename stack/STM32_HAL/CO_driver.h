@@ -58,7 +58,7 @@
 #include <stdbool.h>
 #include <stddef.h>         /* for 'NULL' */
 #include <stdint.h>         /* for 'int8_t' to 'uint64_t' */
-#include "stm32l4xx.h"
+#include "hal.h"
 
 #define bool_t bool
 #define CO_LITTLE_ENDIAN
